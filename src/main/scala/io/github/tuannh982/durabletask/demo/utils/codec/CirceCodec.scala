@@ -56,6 +56,7 @@ class CirceCodec(
     classOf[Long].getName   -> Encoder[Long],
     classOf[Float].getName  -> Encoder[Float],
     classOf[Double].getName -> Encoder[Double],
+    classOf[String].getName -> Encoder[String],
     classOf[Unit].getName   -> Encoder[Unit]
   ) ++ encoderMap.map {
     case (k, v) =>
@@ -69,6 +70,7 @@ class CirceCodec(
     classOf[Long].getName   -> Decoder[Long],
     classOf[Float].getName  -> Decoder[Float],
     classOf[Double].getName -> Decoder[Double],
+    classOf[String].getName -> Decoder[String],
     classOf[Unit].getName   -> Decoder[Unit]
   ) ++ decoderMap.map {
     case (k, v) =>
@@ -100,6 +102,19 @@ class CirceCodec(
     } yield result
     result match {
       case Left(err)    => throw err
+      case Right(value) => value
+    }
+  }
+
+  override def tryDecode(v: String): Any = {
+    val result = for {
+      json <- parser.parse(v)
+      wrapped <- json.as[WrappedJson](WrappedJson.decoder)
+      wrappedJson <- parser.parse(wrapped.json)
+      result <- wrappedJson.as[Any](resolvedDecoderMap(resolveClassName(wrapped.cls)).asInstanceOf[Decoder[Any]])
+    } yield result
+    result match {
+      case Left(err) => throw err
       case Right(value) => value
     }
   }

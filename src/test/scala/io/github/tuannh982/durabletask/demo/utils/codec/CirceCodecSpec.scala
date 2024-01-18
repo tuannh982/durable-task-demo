@@ -1,5 +1,6 @@
 package io.github.tuannh982.durabletask.demo.utils.codec
 
+import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -57,6 +58,18 @@ class CirceCodecSpec extends AnyFlatSpec with MockFactory {
     val x: Unit       = (): Unit
     val encoded       = defaultCodec.encode(x)
     val decoded: Unit = defaultCodec.decode(encoded, classOf[Unit])
+    assert(x == decoded)
+  }
+
+  it should "correctly encode/decode exception type" in {
+    case class MyException(msg: String) extends Exception
+    val codec = new CirceCodec(
+      Map(classOf[MyException].getName -> deriveEncoder[MyException]),
+      Map(classOf[MyException].getName -> deriveDecoder[MyException])
+    )
+    val x: MyException = MyException("some-error-occurred")
+    val encoded        = codec.encode(x)
+    val decoded        = codec.decode(encoded, classOf[MyException])
     assert(x == decoded)
   }
 }

@@ -8,13 +8,14 @@ trait Worker extends SimpleLogging {
 
   @volatile
   private var running = true
+  private val monitor = new Object
 
   def loop(): Unit
 
   def start()(implicit ec: ExecutionContext): Future[Unit] = {
     Future {
-      logger.info("worker started")
       try {
+        logger.info("worker started")
         while (running) {
           loop()
         }
@@ -25,6 +26,11 @@ trait Worker extends SimpleLogging {
         case e: Throwable =>
           logger.fatal(e)
           throw e
+      } finally {
+        logger.info("worker stopped")
+        monitor.synchronized {
+          monitor.notifyAll()
+        }
       }
     }
   }
@@ -32,6 +38,9 @@ trait Worker extends SimpleLogging {
   def stop(): Unit = {
     running.synchronized {
       running = false
+    }
+    monitor.synchronized {
+      monitor.wait()
     }
   }
 }
