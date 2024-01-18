@@ -11,8 +11,10 @@ final class SimpleLogger(className: String) {
   def warn(msg: String): Unit                = log(msg, LogLevel.Warn)
   def error(msg: String): Unit               = log(msg, LogLevel.Error)
   def error(msg: String, e: Throwable): Unit = log(s"$msg\n${stackTrace(e)}", LogLevel.Error)
+  def error(e: Throwable): Unit              = log(s"${stackTrace(e)}", LogLevel.Error)
   def fatal(msg: String): Unit               = log(msg, LogLevel.Fatal)
   def fatal(msg: String, e: Throwable): Unit = log(s"$msg\n${stackTrace(e)}", LogLevel.Fatal)
+  def fatal(e: Throwable): Unit              = log(s"${stackTrace(e)}", LogLevel.Fatal)
 
   private def log(msg: String, level: LogLevel): Unit = {
     if (level.intLevel >= logLevel.intLevel) {
