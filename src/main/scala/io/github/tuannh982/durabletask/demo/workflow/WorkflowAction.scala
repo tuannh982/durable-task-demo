@@ -14,6 +14,10 @@ object WorkflowAction {
     encodedError: String
   ) extends WorkflowAction
 
+  case class SuspendWorkflow(
+    instanceID: String
+  ) extends WorkflowAction
+
   case class ScheduleActivity(
     instanceID: String,
     taskID: Int,

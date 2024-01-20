@@ -7,5 +7,6 @@ trait ScheduledTask[T] {
 }
 
 trait WorkflowContext {
+  def isReplaying: Boolean
   def scheduleActivity[I, O](activity: Activity[I, O], input: I): ScheduledTask[O]
 }

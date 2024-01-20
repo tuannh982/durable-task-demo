@@ -108,13 +108,13 @@ class CirceCodec(
 
   override def tryDecode(v: String): Any = {
     val result = for {
-      json <- parser.parse(v)
-      wrapped <- json.as[WrappedJson](WrappedJson.decoder)
+      json        <- parser.parse(v)
+      wrapped     <- json.as[WrappedJson](WrappedJson.decoder)
       wrappedJson <- parser.parse(wrapped.json)
-      result <- wrappedJson.as[Any](resolvedDecoderMap(resolveClassName(wrapped.cls)).asInstanceOf[Decoder[Any]])
+      result      <- wrappedJson.as[Any](resolvedDecoderMap(resolveClassName(wrapped.cls)).asInstanceOf[Decoder[Any]])
     } yield result
     result match {
-      case Left(err) => throw err
+      case Left(err)    => throw err
       case Right(value) => value
     }
   }

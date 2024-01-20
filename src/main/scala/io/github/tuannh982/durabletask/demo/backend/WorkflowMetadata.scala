@@ -10,6 +10,7 @@ object WorkflowResult {
 case class WorkflowMetadata(
   instanceID: String,
   workflowClass: String,
+  lastSuspendedOffset: Int,
   result: Option[WorkflowResult]
 ) {
   def isFinished: Boolean = result.nonEmpty

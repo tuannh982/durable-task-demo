@@ -13,18 +13,8 @@ class MockBackend extends Backend with SimpleLogging {
   private val workflowTaskQueue = new LinkedBlockingQueue[WorkflowTask]()
   private val activityTaskQueue = new LinkedBlockingQueue[ActivityTask]()
 
-  override def upsertWorkflowMetadata(
-    instanceID: String,
-    workflowClass: String,
-    result: Option[WorkflowResult],
-    forced: Boolean
-  ): Unit = {
-    logger.debug(s"upsertWorkflowMetadata($instanceID, $workflowClass, $result, $forced)")
-    if (forced) {
-      workflowMetadata.put(instanceID, WorkflowMetadata(instanceID, workflowClass, result))
-    } else {
-      workflowMetadata.putIfAbsent(instanceID, WorkflowMetadata(instanceID, workflowClass, result))
-    }
+  private def upsertNewWorkflowMetadata(instanceID: String, workflowClass: String): Unit = {
+    workflowMetadata.putIfAbsent(instanceID, WorkflowMetadata(instanceID, workflowClass, -1, None))
   }
 
   override def getWorkflowMetadata(instanceID: String): Option[WorkflowMetadata] = {
@@ -35,7 +25,7 @@ class MockBackend extends Backend with SimpleLogging {
 
   override def scheduleWorkflowTask(instanceID: String, workflowClass: String, encodedInput: String): Unit = {
     logger.debug(s"scheduleWorkflowTask($instanceID, $workflowClass, $encodedInput)")
-    upsertWorkflowMetadata(instanceID, workflowClass, None, forced = false)
+    upsertNewWorkflowMetadata(instanceID, workflowClass)
     val task = WorkflowTask(instanceID, workflowClass, encodedInput)
     workflowTaskQueue.put(task)
   }
@@ -72,12 +62,21 @@ class MockBackend extends Backend with SimpleLogging {
           Option(history.get(instanceID)) match {
             case Some(historyEvents) =>
               history.put(instanceID, historyEvents ++ events)
-              val updatedResult = events.last match {
-                case HistoryEvent.WorkflowCompleted(_, encodedOutput) => Some(WorkflowResult.Completed(encodedOutput))
-                case HistoryEvent.WorkflowFailed(_, encodedError)     => Some(WorkflowResult.Failed(encodedError))
-                case _                                                => None
+              val lastEvent = events.last
+              val updatedMetadata = lastEvent match {
+                case HistoryEvent.WorkflowCompleted(_, encodedOutput) =>
+                  val result = Some(WorkflowResult.Completed(encodedOutput))
+                  metadata.copy(result = result)
+                case HistoryEvent.WorkflowFailed(_, encodedError) =>
+                  val result = Some(WorkflowResult.Failed(encodedError))
+                  metadata.copy(result = result)
+                case HistoryEvent.WorkflowSuspended(_) =>
+                  val updatedOffset = metadata.lastSuspendedOffset + events.length
+                  metadata.copy(lastSuspendedOffset = updatedOffset)
+                case _ =>
+                  metadata
               }
-              workflowMetadata.put(instanceID, metadata.copy(result = updatedResult))
+              workflowMetadata.put(instanceID, updatedMetadata)
             case None => throw new RuntimeException(s"workflow $instanceID history not found")
           }
         case None => throw new RuntimeException(s"workflow $instanceID metadata not found")

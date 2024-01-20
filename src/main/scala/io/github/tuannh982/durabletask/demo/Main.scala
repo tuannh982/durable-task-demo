@@ -42,10 +42,23 @@ object Main extends SimpleLogging {
     private val multiplyActivity = new MultiplyActivity
 
     override def execute(ctx: WorkflowContext, input: DemoWorkflowInput): Int = {
+      if (!ctx.isReplaying) {
+        println("calculate (a + b) * c")
+        println(s"a = ${input.a}, b = ${input.b}, c = ${input.c}")
+      }
       ctx.scheduleActivity(greetingActivity, "workflow").get()
-      val sumAB         = ctx.scheduleActivity(sumActivity, IntTuple2(input.a, input.b)).get()
+      val sumAB = ctx.scheduleActivity(sumActivity, IntTuple2(input.a, input.b)).get()
+      if (!ctx.isReplaying) {
+        println(s"sumAB = $sumAB")
+      }
       val sumABThenMulC = ctx.scheduleActivity(multiplyActivity, IntTuple2(sumAB, input.c)).get()
-      val result        = sumABThenMulC
+      if (!ctx.isReplaying) {
+        println(s"sumABThenMulC = $sumABThenMulC")
+      }
+      val result = sumABThenMulC
+      if (!ctx.isReplaying) {
+        println("bye workflow")
+      }
       result
     }
   }

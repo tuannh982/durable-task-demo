@@ -18,7 +18,8 @@ import scala.util.Try
 private[workflow] class WorkflowExecutionContextImpl(
   codec: Codec,
   task: WorkflowTask,
-  history: List[HistoryEvent]
+  history: List[HistoryEvent],
+  lastSuspendedOffset: Int
 ) extends WorkflowExecutionContext
     with SimpleLogging {
   outer =>
@@ -57,12 +58,16 @@ private[workflow] class WorkflowExecutionContextImpl(
     */
   private class HistoryPlayer {
     private var historyTapeCursor: Int = 0
+    var isReplaying: Boolean           = 0 <= lastSuspendedOffset
 
     def handleNextEvent(): Boolean = {
+      if (historyTapeCursor > lastSuspendedOffset) {
+        isReplaying = false
+      }
       if (historyTapeCursor < history.length) {
         val event = history(historyTapeCursor)
-        historyTapeCursor += 1
         outer.onEvent(event)
+        historyTapeCursor += 1
       }
       historyTapeCursor < history.length
     }
@@ -73,6 +78,8 @@ private[workflow] class WorkflowExecutionContextImpl(
     */
 
   private class LocalWorkflowContext extends WorkflowContext {
+
+    override def isReplaying: Boolean = historyPlayer.isReplaying
 
     override def scheduleActivity[I, O](activity: Activity[I, O], input: I): ScheduledTask[O] = {
       val encodedInput = codec.encode(input)
@@ -108,8 +115,9 @@ private[workflow] class WorkflowExecutionContextImpl(
             task.complete(util.Failure(decodedError))
           case None => (): Unit // maybe duplicated event, ignoring
         }
-      case HistoryEvent.WorkflowCompleted(instanceID, encodedOutput) => (): Unit // ignore this event
-      case HistoryEvent.WorkflowFailed(instanceID, encodedError)     => (): Unit // ignore this event
+      case HistoryEvent.WorkflowCompleted(_, _) => (): Unit // ignore this event
+      case HistoryEvent.WorkflowFailed(_, _)    => (): Unit // ignore this event
+      case HistoryEvent.WorkflowSuspended(_)    => (): Unit // ignore this event
     }
   }
 
@@ -159,7 +167,7 @@ private[workflow] class WorkflowExecutionContextImpl(
             List(WorkflowAction.FailWorkflow(instanceID, encodedError))
           case WorkflowExecutionResult.Suspended =>
             finished = false
-            List.empty
+            List(WorkflowAction.SuspendWorkflow(instanceID))
         }
       case None => throw new RuntimeException("execution result must be set")
     }
@@ -177,7 +185,9 @@ private[workflow] object WorkflowExecutionContextImpl {
         HistoryEvent.WorkflowCompleted(instanceID, encodedOutput)
       case WorkflowAction.FailWorkflow(instanceID, encodedError) =>
         HistoryEvent.WorkflowFailed(instanceID, encodedError)
-      case WorkflowAction.ScheduleActivity(instanceID, taskID, activityClass, encodedInput) =>
+      case WorkflowAction.SuspendWorkflow(instanceID) =>
+        HistoryEvent.WorkflowSuspended(instanceID)
+      case WorkflowAction.ScheduleActivity(_, taskID, activityClass, encodedInput) =>
         HistoryEvent.ActivityScheduled(taskID, activityClass, encodedInput)
     }
   }
@@ -188,8 +198,9 @@ class WorkflowWorker(codec: Codec, backend: Backend) extends QueueWorker[Workflo
 
   override def handle(task: WorkflowTask): Unit = {
     logger.debug(s"task polled: $task")
-    val history = backend.fetchHistory(task.instanceID)
-    val ctx     = new WorkflowExecutionContextImpl(codec, task, history)
+    val history             = backend.fetchHistory(task.instanceID)
+    val lastSuspendedOffset = backend.getWorkflowMetadata(task.instanceID).get.lastSuspendedOffset
+    val ctx                 = new WorkflowExecutionContextImpl(codec, task, history, lastSuspendedOffset)
     logger.debug(s"start workflow execution ${task.instanceID}")
     val (finished, events, actions) = ctx.execute()
     logger.debug(s"workflow execution ${task.instanceID} finished, new events $events")

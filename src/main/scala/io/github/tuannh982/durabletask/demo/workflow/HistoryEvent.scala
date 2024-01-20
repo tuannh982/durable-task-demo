@@ -29,4 +29,8 @@ object HistoryEvent {
     instanceID: String,
     encodedError: String
   ) extends HistoryEvent
+
+  case class WorkflowSuspended(
+    instanceID: String
+  ) extends HistoryEvent
 }
